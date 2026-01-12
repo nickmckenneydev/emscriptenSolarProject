@@ -1,0 +1,3 @@
+/home/a/Desktop/backup_attempt/build/CMakeFiles/firstsoloproj.dir
+/home/a/Desktop/backup_attempt/build/CMakeFiles/edit_cache.dir
+/home/a/Desktop/backup_attempt/build/CMakeFiles/rebuild_cache.dir

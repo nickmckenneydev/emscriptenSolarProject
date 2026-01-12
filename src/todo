@@ -1,0 +1,5 @@
+Render Object like Normal -> color Buffer
+update stencil buffer with 1 when I have a frag from object and 0 when I dont
+setup depth testing
+Draw fragments only when stencil value is not 1
+then restore color buffer
