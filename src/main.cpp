@@ -16,7 +16,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 
 #include "stb_image.h"
-// #include "TinyGLTF/tiny_gltf.h"
+
 namespace fs = std::filesystem;
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
