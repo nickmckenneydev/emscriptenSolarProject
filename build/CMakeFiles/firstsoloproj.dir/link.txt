@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/firstsoloproj.dir/src/main.cpp.o CMakeFiles/firstsoloproj.dir/src/glad.c.o -o firstsoloproj  -lglfw -lassimp /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so 

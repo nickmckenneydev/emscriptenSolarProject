@@ -1,49 +1,224 @@
-
-#include "glad.h"
+#include <emscripten.h>
+#define GLFW_INCLUDE_ES3
 #include <GLFW/glfw3.h>
+#include <GLES3/gl3.h>
 
+// Project Headers
 #include "shader.h"
 #include "camera.h"
 #include "model.h"
-#include "glm/vec3.hpp"
-#include "glm/vec4.hpp"   // glm::vec4
-#include "glm/mat4x4.hpp" // glm::mat4
-#include "glm/gtc/matrix_transform.hpp"
+
+// Vendor Headers (Available via -I src/vendor)
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "stb_image.h" // Declaration only (Implementation in Texture.cpp)
+
 #include <iostream>
-#include <filesystem>
+#include <vector>
 
-#define STB_IMAGE_IMPLEMENTATION
+// ==========================================================================
+// GLOBAL STATE
+// ==========================================================================
+GLFWwindow *window;
+Camera camera(glm::vec3(15.0f, 5.0f, 13.0f));
 
-#include "stb_image.h"
+// Timing
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
-namespace fs = std::filesystem;
+// Mouse State
+float lastX = 800.0f / 2.0f;
+float lastY = 600.0f / 2.0f;
+bool firstMouse = true;
+
+// Screen Settings
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+// Global Objects
+Shader *planetsShader = nullptr;
+Model *modelObjectMercury = nullptr;
+Model *sunGLTF = nullptr;
+Model *backpack = nullptr;
+
+// Texture IDs
+unsigned int WindowDiffuseMap;
+unsigned int WallDiffuseMap;
+unsigned int WhiteTexture; // optimization: created once, used many times
+
+// Geometry
+unsigned int PlanetsVAO, rightplaneVAO, allOtherPlanesVAO;
+unsigned int VBO[3]; // We use 3 buffers in the code below
+
+// Lighting Data
+glm::vec3 pointLightPositions[] = {
+    glm::vec3(8.0f, 0.0f, 0.0f),
+};
+glm::vec3 pointLightColors[] = {
+    glm::vec3(0.75f, 0.0f, 1.0f)};
+
+// ==========================================================================
+// FORWARD DECLARATIONS
+// ==========================================================================
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-void draw(Shader shadername, GLuint VAOname, unsigned int DiffuseMapname, int verticesCount, unsigned int SpecularMapname = 0);
-
 unsigned int loadTexture(const char *path);
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+unsigned int createWhiteTexture();
 
-Camera camera(glm::vec3(15.0f, 5.0f, 13.0f));
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
-bool firstMouse = true;
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
-GLint success;
-char infoLog[512];
+// Draw helper
+void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount, unsigned int SpecularMap = 0);
+
+// ==========================================================================
+// MAIN LOOP (Called every frame)
+// ==========================================================================
+void main_loop()
+{
+    // 1. Time Logic
+    float currentFrame = static_cast<float>(glfwGetTime());
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    // 2. Input
+    processInput(window);
+
+    // 3. Clear Screen
+    glClearColor(0.07f, 0.13f, 0.17f, 1.0f);
+    glClearStencil(0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    // 4. Matrix Setup
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = camera.GetViewMatrix();
+
+    // 5. Shader Uniforms (Global)
+    planetsShader->use();
+    planetsShader->setMat4("projection", projection);
+    planetsShader->setMat4("view", view);
+    planetsShader->setVec3("viewPos", camera.Position);
+
+    // Material
+    planetsShader->setInt("material.specular", 1);
+    planetsShader->setFloat("material.shininess", 3.0f);
+
+    // Directional Light
+    planetsShader->setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+    planetsShader->setVec3("dirLight.ambient", 0.3f, 0.24f, 0.14f);
+    planetsShader->setVec3("dirLight.diffuse", 0.7f, 0.42f, 0.26f);
+    planetsShader->setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
+
+    // Point Light
+    planetsShader->setVec3("pointLights[0].position", pointLightPositions[0]);
+    planetsShader->setVec3("pointLights[0].ambient", pointLightColors[0] * 0.1f);
+    planetsShader->setVec3("pointLights[0].diffuse", pointLightColors[0]);
+    planetsShader->setVec3("pointLights[0].specular", pointLightColors[0]);
+    planetsShader->setFloat("pointLights[0].constant", 1.0f);
+    planetsShader->setFloat("pointLights[0].linear", 0.09f);
+    planetsShader->setFloat("pointLights[0].quadratic", 0.032f);
+
+    // 6. Global Render State
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glEnable(GL_STENCIL_TEST);
+
+    // --- DRAW SCENE ---
+
+    // A. Interior Walls (Use White Texture)
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+    glFrontFace(GL_CCW);
+    glDepthMask(GL_FALSE);
+    glStencilMask(0x00);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    draw(*planetsShader, PlanetsVAO, WhiteTexture, 36);
+
+    // B. Windows (Transparent-ish logic)
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+    glDepthMask(GL_FALSE);
+
+    // Right Window
+    glStencilMask(0xFF);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    draw(*planetsShader, rightplaneVAO, WindowDiffuseMap, 6);
+
+    // Other Windows
+    glStencilMask(0xFF);
+    glStencilFunc(GL_NOTEQUAL, 0x2, 0xFF);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    draw(*planetsShader, allOtherPlanesVAO, WindowDiffuseMap, 18);
+
+    // C. Exterior Walls
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_TRUE);
+    glStencilMask(0x00);
+    glStencilFunc(GL_EQUAL, 0, 0xFF);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    draw(*planetsShader, PlanetsVAO, WallDiffuseMap, 36);
+
+    // D. Sun Model
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(0.2f));
+    planetsShader->setMat4("model", model);
+
+    glStencilMask(0x00);
+    glStencilFunc(GL_EQUAL, 1, 0xFF);
+    sunGLTF->Draw(*planetsShader);
+
+    // E. Mercury Model
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(3.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
+    model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 5.5f, glm::vec3(0.0, 1.0, 0.0));
+    planetsShader->setMat4("model", model);
+
+    modelObjectMercury->Draw(*planetsShader);
+
+    // F. Backpack Model
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(1.2f));
+    planetsShader->setMat4("model", model);
+
+    glStencilMask(0x00);
+    glStencilFunc(GL_EQUAL, 2, 0xFF);
+    backpack->Draw(*planetsShader);
+
+    // Reset State
+    glStencilMask(0xFF);
+
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+}
+
+// ==========================================================================
+// MAIN
+// ==========================================================================
 int main()
 {
-    glfwInit();
+    // Init GLFW
+    if (!glfwInit())
+    {
+        std::cout << "Failed to init GLFW" << std::endl;
+        return -1;
+    }
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_STENCIL_BITS, 8); // Request an 8-bit stencil buffer
-    GLFWwindow *window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API); // <--- Critical for WebGL
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_STENCIL_BITS, 8);
+
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "WebAssembly OpenGL", NULL, NULL);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -55,23 +230,33 @@ int main()
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cout << "Failed to initialize GLAD" << std::endl;
-        return -1;
-    }
 
-    Shader planets("/home/a/Desktop/FirstSoloProj/src/shaders/planets.vs", "/home/a/Desktop/FirstSoloProj/src/shaders/planets.fs");
-    Shader shaderSingleColor("/home/a/Desktop/FirstSoloProj/src/shaders/planets.vs", "/home/a/Desktop/FirstSoloProj/src/shaders/shaderSingleColor.fs");
-    Model modelObjectMercury("/home/a/Desktop/FirstSoloProj/src/objects/mercury/Mercury 1K.obj");
-    Model sunGLTF("/home/a/Desktop/FirstSoloProj/src/objects/sun/scene.gltf");
-    Model backpack("/home/a/Desktop/FirstSoloProj/src/objects/backpack/backpack.obj");
+    // Flip textures for OpenGL
+    stbi_set_flip_vertically_on_load(true);
 
-    unsigned int WindowDiffuseMap = loadTexture("/home/a/Desktop/FirstSoloProj/src/purple.jpeg");
-    unsigned int WallDiffuseMap = loadTexture("/home/a/Desktop/FirstSoloProj/src/wall.jpg");
+    // ---------------------------------------------------------
+    // ASSET LOADING
+    // ---------------------------------------------------------
 
-    // configure global opengl state
-    // -----------------------------
+    // Create the white fallback texture once
+    WhiteTexture = createWhiteTexture();
+
+    // Load Shaders
+    planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
+
+    // Load Models
+    // Ensure you have fixed model.h to use TinyGLTF or stripped Assimp!
+    modelObjectMercury = new Model("res/models/mercury/Mercury 1K.obj");
+    sunGLTF = new Model("res/models/sun/scene.gltf");
+    backpack = new Model("res/models/backpack/backpack.obj");
+
+    // Load Textures
+    WindowDiffuseMap = loadTexture("res/textures/purple.jpeg");
+    WallDiffuseMap = loadTexture("res/textures/wall.jpg");
+
+    // ---------------------------------------------------------
+    // BUFFERS SETUP
+    // ---------------------------------------------------------
 
     float vertices[] = {
         // Back face (z = -0.5f)
@@ -156,201 +341,133 @@ int main()
         0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.625f, 0.75f,
         0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.625f, 1.0f,
         -0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.375f, 1.0f};
-    glm::vec3 pointLightPositions[] = {
-        glm::vec3(8.0f, 0.0f, 0.0f),
-    };
-    glm::vec3 pointLightColors[] = {
-        glm::vec3(0.75f, 0.0f, 1.0f)};
-    unsigned int VBO[4], PlanetsVAO, rightplaneVAO, allOtherPlanesVAO;
+
+    // VBO[0]: Planets
     glGenVertexArrays(1, &PlanetsVAO);
     glGenBuffers(1, &VBO[0]);
     glBindVertexArray(PlanetsVAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    // normal attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-    // texture attribute
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
-    //--------------------------------------------------------------------------------------------------//
 
+    // VBO[1]: Right Plane
     glGenVertexArrays(1, &rightplaneVAO);
     glGenBuffers(1, &VBO[1]);
     glBindVertexArray(rightplaneVAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(rightplane_vertices), rightplane_vertices, GL_STATIC_DRAW);
-    // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    // normal attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-    // texture attribute
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
-    //--------------------------------------------------------------------------------------------------//
-    glGenBuffers(1, &VBO[2]);
+
+    // VBO[2]: Other Planes
     glGenVertexArrays(1, &allOtherPlanesVAO);
+    glGenBuffers(1, &VBO[2]);
     glBindVertexArray(allOtherPlanesVAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO[2]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(frontface_vertices), frontface_vertices, GL_STATIC_DRAW);
-    // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    // normal attribute
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-    // texture attribute
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
-    while (!glfwWindowShouldClose(window))
-    {
-        float currentFrame = static_cast<float>(glfwGetTime());
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
 
-        processInput(window);
+    // Start Main Loop
+    emscripten_set_main_loop(main_loop, 0, 1);
 
-        // view/projection transformations
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        glm::mat4 view = camera.GetViewMatrix();
-
-        glUseProgram(planets.ID);
-        glUniformMatrix4fv(glGetUniformLocation(planets.ID, "projection"), 1, GL_FALSE, &projection[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(planets.ID, "view"), 1, GL_FALSE, &view[0][0]);
-        glm::mat4 model = glm::mat4(1.0f);
-        // Planet Global
-        glUniform3fv(glGetUniformLocation(planets.ID, "viewPos"), 1, &camera.Position[0]);
-        glUniformMatrix4fv(glGetUniformLocation(planets.ID, "model"), 1, GL_FALSE, &model[0][0]);
-
-        glUniform1i(glGetUniformLocation(planets.ID, "material.specular"), 1);
-        glUniform1f(glGetUniformLocation(planets.ID, "material.shininess"), 3.0f);
-        glUniform3f(glGetUniformLocation(planets.ID, "dirLight.direction"), -0.2f, -1.0f, -0.3f);
-        glUniform3f(glGetUniformLocation(planets.ID, "dirLight.ambient"), 0.3f, 0.24f, 0.14f);
-        glUniform3f(glGetUniformLocation(planets.ID, "dirLight.diffuse"), 0.7f, 0.42f, 0.26f);
-        glUniform3f(glGetUniformLocation(planets.ID, "dirLight.specular"), 0.5f, 0.5f, 0.5f);
-        // // Point light 1
-
-        glUniform3f(glGetUniformLocation(planets.ID, "pointLights[0].position"), pointLightPositions[0].x, pointLightPositions[0].y, pointLightPositions[0].z);
-        glUniform3f(glGetUniformLocation(planets.ID, "pointLights[0].ambient"), pointLightColors[0].x * 0.1, pointLightColors[0].y * 0.1, pointLightColors[0].z * 0.1);
-        glUniform3f(glGetUniformLocation(planets.ID, "pointLights[0].diffuse"), pointLightColors[0].x, pointLightColors[0].y, pointLightColors[0].z);
-        glUniform3f(glGetUniformLocation(planets.ID, "pointLights[0].specular"), pointLightColors[0].x, pointLightColors[0].y, pointLightColors[0].z);
-        glUniform1f(glGetUniformLocation(planets.ID, "pointLights[0].constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(planets.ID, "pointLights[0].linear"), 0.09);
-        glUniform1f(glGetUniformLocation(planets.ID, "pointLights[0].quadratic"), 0.032);
-
-        // Specify the color of the background
-        glClearColor(0.07f, 0.13f, 0.17f, 1.0f);
-        // Clean the back buffer and depth buffer
-        glClearStencil(0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-        // Setup global state
-        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        glEnable(GL_DEPTH_TEST); // MAKE IT SO THINGS DONT SHOW THROUGH WALLS
-        glDepthFunc(GL_LESS);
-        glEnable(GL_STENCIL_TEST);
-
-        // INTERIOR WALLS
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT); // discard the front facing triangles and only render the back facing ones.
-        glFrontFace(GL_CCW);
-        glDepthMask(GL_FALSE); // DONT UPDATE BUFFER
-        glStencilMask(0x00);
-        glStencilFunc(GL_ALWAYS, 1, 0xFF);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        draw(planets, PlanetsVAO, 1, 36);
-        // WINDOW ATTRIBUTES
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK); // Back faces are discarded
-        glFrontFace(GL_CCW);
-        glDepthMask(GL_FALSE); // DONT UPDATE BUFFER
-        // EXTERIOR RIGHT WINDOW
-        glStencilMask(0xFF);
-        glStencilFunc(GL_ALWAYS, 1, 0xFF);
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-        draw(planets, rightplaneVAO, WindowDiffuseMap, 6);
-        // EXTERIOR ALL OTHER WINDOW
-        glStencilMask(0xFF);
-        glStencilFunc(GL_NOTEQUAL, 0x2, 0xFF);
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-        draw(planets, allOtherPlanesVAO, WindowDiffuseMap, 24);
-        // EXTERIOR WALLS
-        glDisable(GL_CULL_FACE); // render everything front and back
-        glDepthMask(GL_TRUE);    // update buffer
-        glStencilMask(0x00);
-        glStencilFunc(GL_EQUAL, 0, 0xFF);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        draw(planets, PlanetsVAO, WallDiffuseMap, 36);
-
-        // Render Sun Model
-        model = glm::mat4(1.0f);
-        model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
-        glUniformMatrix4fv(glGetUniformLocation(planets.ID, "model"), 1, GL_FALSE, &model[0][0]);
-        glStencilMask(0x00);
-        glStencilFunc(GL_EQUAL, 1, 0xFF);
-        sunGLTF.Draw(planets);
-        model = glm::mat4(1.0f);
-        model = glm::scale(model, glm::vec3(3.0f, 3.0f, 3.0f));
-        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
-        model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
-        model = glm::rotate(model, (float)glfwGetTime() * 5.5f, glm::vec3(0.0, 1.0, 0.0));
-        glUniformMatrix4fv(glGetUniformLocation(planets.ID, "model"), 1, GL_FALSE, &model[0][0]);
-        modelObjectMercury.Draw(planets);
-
-        // Render BACKPACK Model
-
-        model = glm::mat4(1.0f);
-        model = glm::scale(model, glm::vec3(1.2f, 1.2f, 1.2f));
-        glUniformMatrix4fv(glGetUniformLocation(planets.ID, "model"), 1, GL_FALSE, &model[0][0]);
-        glStencilMask(0x00);
-        glStencilFunc(GL_EQUAL, 2, 0xFF);
-        backpack.Draw(planets);
-        // Reset state
-        glStencilMask(0xFF);
-        // planets.use();
-        // Render Mercury Model
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-    glDeleteProgram(planets.ID);
-    // glDeleteBuffers(1, &VBO);
-    glfwTerminate();
     return 0;
 }
 
-void draw(Shader shadername, GLuint VAOname, unsigned int DiffuseMapname, int verticesCount, unsigned int SpecularMapname)
+// ==========================================================================
+// HELPERS
+// ==========================================================================
+
+// Optimized Draw Call
+void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount, unsigned int SpecularMap)
 {
-    shadername.use();
-    glBindVertexArray(VAOname);
+    shader.use();
+    glBindVertexArray(VAO);
+
+    // Bind Diffuse
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, DiffuseMapname);
-    glUniform1i(glGetUniformLocation(shadername.ID, "material.diffuse"), 0);
-    if (DiffuseMapname == 1)
+    glBindTexture(GL_TEXTURE_2D, DiffuseMap);
+    shader.setInt("material.diffuse", 0);
+
+    // Bind Specular (Optional)
+    if (SpecularMap != 0)
     {
-        GLuint whiteTexture;
-        glGenTextures(1, &whiteTexture);
-        glBindTexture(GL_TEXTURE_2D, whiteTexture);
-        unsigned char white[] = {255, 255, 255, 255};
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, SpecularMap);
+        shader.setInt("material.specular", 1);
     }
-    // 2. Bind the Specular Map to Unit 1
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, SpecularMapname);
-    // Tell the shader: material.specular is on Unit 1
-    glUniform1i(glGetUniformLocation(shadername.ID, "material.specular"), 1);
-    shadername.setVec3("viewPos", camera.Position);
+
+    // Default Model Matrix (Rotates the object)
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(10.0f));
     model = glm::rotate(model, (float)glfwGetTime() * 0.05f, glm::vec3(0.0, 1.0, 0.0));
+    shader.setMat4("model", model);
 
-    glUniformMatrix4fv(glGetUniformLocation(shadername.ID, "model"), 1, GL_FALSE, &model[0][0]);
     glDrawArrays(GL_TRIANGLES, 0, verticesCount);
+}
+
+// Create a simple 1x1 white texture for untextured objects
+unsigned int createWhiteTexture()
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    unsigned char white[] = {255, 255, 255, 255};
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    return textureID;
+}
+
+unsigned int loadTexture(char const *path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+
+    // FORCE 4 CHANNELS (RGBA) - Fixes color shifting issues
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 4);
+
+    if (data)
+    {
+        GLenum format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+
+        // CRITICAL FIX: Disable 4-byte alignment restriction
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
 }
 
 void processInput(GLFWwindow *window)
@@ -366,12 +483,12 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
 }
+
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
-    // make sure the viewport matches the new window dimensions; note that width and
-    // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
+
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
@@ -382,54 +499,14 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
         lastY = ypos;
         firstMouse = false;
     }
-
     float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-
+    float yoffset = lastY - ypos;
     lastX = xpos;
     lastY = ypos;
-
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
-}
-unsigned int loadTexture(char const *path)
-{
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-
-    int width, height, nrComponents;
-    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
-    if (data)
-    {
-        GLenum format;
-        if (nrComponents == 1)
-            format = GL_RED;
-        else if (nrComponents == 3)
-            format = GL_RGB;
-        else if (nrComponents == 4)
-            format = GL_RGBA;
-
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        std::cout << "Texture WIN to load at path: " << path << std::endl;
-
-        stbi_image_free(data);
-    }
-    else
-    {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
-        stbi_image_free(data);
-    }
-
-    return textureID;
 }

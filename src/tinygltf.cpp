@@ -1,29 +1,15 @@
-// Define these only in *one* .cc file.
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-// #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
-#include "tiny_gltf.h"
 
-using namespace tinygltf;
+// Prevent TinyGLTF from using its own include logic
+// (This avoids "file not found" errors when paths differ)
+#define TINYGLTF_NO_INCLUDE_STB_IMAGE
+#define TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
 
-Model model;
-TinyGLTF loader;
-std::string err;
-std::string warn;
-std::string filename = "input.gltf";
+// Manually include the STB headers FIRST so TinyGLTF can see the functions
+#include "stb_image.h"                // Finds src/vendor/stb_image.h
+#include "TinyGLTF/stb_image_write.h" // Finds src/vendor/TinyGLTF/stb_image_write.h
 
-bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
-//bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, filename); // for binary glTF(.glb)
-
-if (!warn.empty()) {
-  printf("Warn: %s\n", warn.c_str());
-}
-
-if (!err.empty()) {
-  printf("Err: %s\n", err.c_str());
-}
-
-if (!ret) {
-  printf("Failed to parse glTF: %s\n", filename.c_str());
-}
+// Now include TinyGLTF
+#include "TinyGLTF/tiny_gltf.h"
