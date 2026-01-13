@@ -469,7 +469,7 @@ unsigned int loadTexture(char const *path)
 
     return textureID;
 }
-
+// test
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
