@@ -14,7 +14,7 @@
 #include <vector>
 #include <map>
 
-// TINYGLTF SETUP
+// --- TINYGLTF HEADERS (For GLTF Files Only) ---
 #ifndef TINYGLTF_NO_INCLUDE_STB_IMAGE
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE
 #endif
@@ -24,13 +24,17 @@
 #include "TinyGLTF/tiny_gltf.h"
 
 using namespace std;
+#define MAX_BONE_INFLUENCE 4
 
-// --- SIMPLE MESH STRUCTS ---
 struct Vertex
 {
     glm::vec3 Position;
     glm::vec3 Normal;
     glm::vec2 TexCoords;
+    glm::vec3 Tangent;
+    glm::vec3 Bitangent;
+    int m_BoneIDs[MAX_BONE_INFLUENCE];
+    float m_Weights[MAX_BONE_INFLUENCE];
 };
 
 struct Texture
@@ -59,27 +63,21 @@ public:
 
     void Draw(Shader &shader)
     {
-        // Bind textures
-        unsigned int diffuseNr = 1;
         for (unsigned int i = 0; i < textures.size(); i++)
         {
             glActiveTexture(GL_TEXTURE0 + i);
-
             string name = textures[i].type;
-            // FIX: Map "texture_diffuse" to your shader's "material.diffuse"
-            if (name == "texture_diffuse")
-            {
-                glUniform1i(glGetUniformLocation(shader.ID, "material.diffuse"), i);
-            }
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
-        }
 
-        // If no texture, bind white texture to slot 0 to prevent "Brick Backpack"
-        if (textures.empty())
-        {
-            glActiveTexture(GL_TEXTURE0);
-            // Ensure you create a 1x1 white texture in main and bind it here if needed,
-            // but usually assigning a texture manually is better.
+            // FIX: UNIFORM NAMING
+            const char *uniformName = nullptr;
+            if (name == "texture_diffuse")
+                uniformName = "material.diffuse";
+            else if (name == "texture_specular")
+                uniformName = "material.specular";
+
+            if (uniformName)
+                shader.setInt(uniformName, i);
+            glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
 
         glBindVertexArray(VAO);
@@ -112,6 +110,8 @@ private:
     }
 };
 
+unsigned int TextureFromFile(const char *path, const string &directory, bool gamma = false);
+
 // --- MODEL CLASS ---
 class Model
 {
@@ -119,8 +119,9 @@ public:
     vector<Texture> textures_loaded;
     vector<Mesh> meshes;
     string directory;
+    bool gammaCorrection;
 
-    Model(string const &path)
+    Model(string const &path, bool gamma = false) : gammaCorrection(gamma)
     {
         directory = path.substr(0, path.find_last_of('/'));
         loadModel(path);
@@ -132,64 +133,49 @@ public:
             meshes[i].Draw(shader);
     }
 
-    // --- NEW FUNCTION: Manually set texture for all meshes ---
     void SetDiffuseTexture(string path)
     {
-        unsigned int textureID;
-        glGenTextures(1, &textureID);
-
-        int width, height, nrComponents;
-        // Force 4 channels for WebGL
-        unsigned char *data = stbi_load(path.c_str(), &width, &height, &nrComponents, 4);
-        if (data)
-        {
-            glBindTexture(GL_TEXTURE_2D, textureID);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Fix alignment
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-            glGenerateMipmap(GL_TEXTURE_2D);
-
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            stbi_image_free(data);
-        }
-        else
-        {
-            std::cout << "Texture failed to load: " << path << std::endl;
-            return;
-        }
-
+        unsigned int id = TextureFromFile(path.c_str(), "", false);
         Texture tex;
-        tex.id = textureID;
+        tex.id = id;
         tex.type = "texture_diffuse";
         tex.path = path;
 
-        // Apply to all meshes
         for (auto &mesh : meshes)
         {
-            mesh.textures.clear(); // Remove old (or empty) textures
+            mesh.textures.clear();
             mesh.textures.push_back(tex);
         }
     }
 
 private:
+    // --- THE TRAFFIC COP ---
     void loadModel(string const &path)
     {
         string ext = path.substr(path.find_last_of(".") + 1);
+        cout << "[DEBUG] Loading: " << path << " (" << ext << ")" << endl;
+
         if (ext == "gltf" || ext == "glb")
+        {
+            cout << "[DEBUG] Using TinyGLTF (JSON Loader)" << endl;
             loadGLTF(path);
-        else if (ext == "obj")
-            loadOBJ(path);
+        }
         else
-            cout << "Format not supported: " << ext << endl;
+        {
+            cout << "[DEBUG] Using Manual OBJ Loader" << endl;
+            loadOBJ(path);
+        }
     }
 
+    // --- 1. MANUAL OBJ LOADER (Stable for WebAssembly) ---
     void loadOBJ(string const &path)
     {
         std::ifstream file(path);
         if (!file.is_open())
+        {
+            cout << "CRITICAL ERROR: Could not open OBJ file: " << path << endl;
             return;
+        }
 
         vector<glm::vec3> temp_positions;
         vector<glm::vec3> temp_normals;
@@ -228,8 +214,8 @@ private:
                 for (int i = 0; i < 3; i++)
                 {
                     ss >> vertexStr;
-                    // Simple OBJ parsing logic
                     int vIdx = 0, vtIdx = 0, vnIdx = 0;
+
                     size_t firstSlash = vertexStr.find('/');
                     size_t secondSlash = vertexStr.find('/', firstSlash + 1);
 
@@ -244,10 +230,14 @@ private:
                             vnIdx = stoi(vertexStr.substr(secondSlash + 1)) - 1;
                         }
                         else
+                        {
                             vtIdx = stoi(vertexStr.substr(firstSlash + 1)) - 1;
+                        }
                     }
                     else
+                    {
                         vIdx = stoi(vertexStr) - 1;
+                    }
 
                     Vertex vertex;
                     vertex.Position = temp_positions[vIdx];
@@ -265,27 +255,29 @@ private:
         meshes.push_back(Mesh(vertices, indices, textures));
     }
 
+    // --- 2. TINYGLTF LOADER (For GLTF) ---
     void loadGLTF(string const &path)
     {
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
         string err, warn;
         bool ret = false;
+
         if (path.find(".glb") != string::npos)
             ret = loader.LoadBinaryFromFile(&model, &err, &warn, path);
         else
             ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
 
         if (!ret)
+        {
+            cout << "TinyGLTF Error: " << err << endl;
             return;
+        }
 
         for (const auto &gltfMesh : model.meshes)
         {
             for (const auto &primitive : gltfMesh.primitives)
             {
-                // ... (Same GLTF logic as previous, simplified for brevity)
-                // In a real GLTF loader, we'd extract texture indices here.
-                // For now, use SetDiffuseTexture() in main.cpp for reliability.
                 processGLTFPrimitive(model, primitive);
             }
         }
@@ -293,7 +285,6 @@ private:
 
     void processGLTFPrimitive(tinygltf::Model &model, const tinygltf::Primitive &primitive)
     {
-        //
         vector<Vertex> vertices;
         vector<unsigned int> indices;
 
@@ -352,9 +343,49 @@ private:
                     indices.push_back(buf[i]);
             }
         }
-
         vector<Texture> textures;
         meshes.push_back(Mesh(vertices, indices, textures));
     }
 };
+
+// --- ROBUST TEXTURE LOADER ---
+unsigned int TextureFromFile(const char *path, const string &directory, bool gamma)
+{
+    string filename = string(path);
+    if (!directory.empty())
+        filename = directory + '/' + filename;
+
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+
+    // FIX 1: FORCE 4 CHANNELS (Fixes slanted textures)
+    unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 4);
+
+    if (data)
+    {
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        // FIX 2: ALIGNMENT (Fixes browser crashes on odd-sized images)
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        // Helpful debugging
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
+}
 #endif

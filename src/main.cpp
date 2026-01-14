@@ -13,7 +13,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "stb_image.h" // Declaration only (Implementation in Texture.cpp)
-
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -235,24 +235,56 @@ int main()
 
     // 2. Load Shaders
     planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
-
+    std::cout << "--- FILE SYSTEM CHECK ---" << std::endl;
+    std::ifstream f("res/models/mercury/Mercury.obj");
+    if (f.good())
+    {
+        std::cout << "SUCCESS: 'Mercury.obj' found!" << std::endl;
+        std::string firstLine;
+        std::getline(f, firstLine);
+        std::cout << "FIRST LINE: " << firstLine << std::endl;
+    }
+    else
+    {
+        std::cout << "FAILURE: 'Mercury.obj' DOES NOT EXIST." << std::endl;
+    }
+    std::cout << "-------------------------" << std::endl;
     // 3. Load Models
-    modelObjectMercury = new Model("res/models/mercury/Mercury 1K.obj");
-    sunGLTF = new Model("res/models/sun/scene.gltf");
-    backpack = new Model("res/models/backpack/backpack.obj");
-
-    // --- FIX 2: MANUALLY ASSIGN TEXTURES ---
-    // (This requires the updated model.h I gave you in the previous step)
-    // If you don't do this, they will look like Bricks/Walls.
 
     // Mercury
-    modelObjectMercury->SetDiffuseTexture("res/models/mercury/Textures/Diffuse_1K.png");
+    try
+    {
+        std::cout << "Loading Mercury..." << std::endl;
+        modelObjectMercury = new Model("res/models/mercury/Mercury.obj");
+        modelObjectMercury->SetDiffuseTexture("res/models/mercury/diffuse.png");
+    }
+    catch (std::exception &e)
+    {
+        std::cout << "CRITICAL MODEL ERROR: " << e.what() << std::endl;
+    }
+    try
+    {
+        std::cout << "Loading backpack..." << std::endl;
+        backpack = new Model("res/models/backpack/backpack.obj");
 
-    // Sun (Check if this path exists in your res folder, usually it's in textures subfolder)
-    sunGLTF->SetDiffuseTexture("res/models/sun/textures/material_1_baseColor.png");
+        backpack->SetDiffuseTexture("res/models/backpack/diffuse.jpg");
+    }
+    catch (std::exception &e)
+    {
+        std::cout << "CRITICAL MODEL ERROR: " << e.what() << std::endl;
+    }
+    try
+    {
+        std::cout << "Loading SUN..." << std::endl;
+        sunGLTF = new Model("res/models/sun/scene.gltf");
+        sunGLTF->SetDiffuseTexture("res/models/sun/textures/material_1_baseColor.png");
+    }
+    catch (std::exception &e)
+    {
+        std::cout << "CRITICAL MODEL ERROR: " << e.what() << std::endl;
+    }
 
     // Backpack
-    backpack->SetDiffuseTexture("res/models/backpack/diffuse.jpg");
 
     // 4. Load Scene Textures
     WindowDiffuseMap = loadTexture("res/textures/purple.jpeg");

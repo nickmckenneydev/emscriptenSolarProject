@@ -1,6 +1,6 @@
 # Blender v2.79 (sub 0) OBJ File: 'Mercury 1K.blend'
 # www.blender.org
-mtllib Mercury 1K.mtl
+mtllib Mercury.mtl
 o Mercury
 v 0.117845 0.046338 -0.204534
 v 0.131046 0.087391 -0.181819
