@@ -7,6 +7,11 @@
 #include "stb_image.h"
 #include "shader.h"
 
+// --- ASSIMP HEADERS ---
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -14,7 +19,7 @@
 #include <vector>
 #include <map>
 
-// --- TINYGLTF HEADERS (For GLTF Files Only) ---
+// --- TINYGLTF HEADERS ---
 #ifndef TINYGLTF_NO_INCLUDE_STB_IMAGE
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE
 #endif
@@ -68,7 +73,6 @@ public:
             glActiveTexture(GL_TEXTURE0 + i);
             string name = textures[i].type;
 
-            // FIX: UNIFORM NAMING
             const char *uniformName = nullptr;
             if (name == "texture_diffuse")
                 uniformName = "material.diffuse";
@@ -149,120 +153,126 @@ public:
     }
 
 private:
-    // --- THE TRAFFIC COP ---
     void loadModel(string const &path)
     {
         string ext = path.substr(path.find_last_of(".") + 1);
+
         cout << "[DEBUG] Loading: " << path << " (" << ext << ")" << endl;
 
         if (ext == "gltf" || ext == "glb")
         {
-            cout << "[DEBUG] Using TinyGLTF (JSON Loader)" << endl;
             loadGLTF(path);
         }
         else
         {
-            cout << "[DEBUG] Using Manual OBJ Loader" << endl;
+            // Assimp for OBJ
             loadOBJ(path);
         }
     }
 
-    // --- 1. MANUAL OBJ LOADER (Stable for WebAssembly) ---
+    // --- ASSIMP LOADER (UPDATED: Read from Memory) ---
     void loadOBJ(string const &path)
     {
-        std::ifstream file(path);
+        // 1. Read file manually into a buffer
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
         if (!file.is_open())
         {
-            cout << "CRITICAL ERROR: Could not open OBJ file: " << path << endl;
+            cout << "CRITICAL ERROR: Could not open file: " << path << endl;
+            return;
+        }
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        std::vector<char> buffer(size);
+        if (!file.read(buffer.data(), size))
+        {
+            cout << "CRITICAL ERROR: Failed to read file: " << path << endl;
             return;
         }
 
-        vector<glm::vec3> temp_positions;
-        vector<glm::vec3> temp_normals;
-        vector<glm::vec2> temp_texcoords;
-        vector<Vertex> vertices;
-        vector<unsigned int> indices;
+        // 2. Pass buffer to Assimp with "obj" hint
+        Assimp::Importer importer;
+        const aiScene *scene = importer.ReadFileFromMemory(
+            buffer.data(),
+            size,
+            aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_JoinIdenticalVertices,
+            "obj" // <--- FORCE OBJ FORMAT
+        );
 
-        string line;
-        while (getline(file, line))
+        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         {
-            stringstream ss(line);
-            string prefix;
-            ss >> prefix;
-
-            if (prefix == "v")
-            {
-                glm::vec3 temp;
-                ss >> temp.x >> temp.y >> temp.z;
-                temp_positions.push_back(temp);
-            }
-            else if (prefix == "vt")
-            {
-                glm::vec2 temp;
-                ss >> temp.x >> temp.y;
-                temp_texcoords.push_back(temp);
-            }
-            else if (prefix == "vn")
-            {
-                glm::vec3 temp;
-                ss >> temp.x >> temp.y >> temp.z;
-                temp_normals.push_back(temp);
-            }
-            else if (prefix == "f")
-            {
-                string vertexStr;
-                for (int i = 0; i < 3; i++)
-                {
-                    ss >> vertexStr;
-                    int vIdx = 0, vtIdx = 0, vnIdx = 0;
-
-                    size_t firstSlash = vertexStr.find('/');
-                    size_t secondSlash = vertexStr.find('/', firstSlash + 1);
-
-                    if (firstSlash != string::npos)
-                    {
-                        vIdx = stoi(vertexStr.substr(0, firstSlash)) - 1;
-                        if (secondSlash != string::npos)
-                        {
-                            string vtStr = vertexStr.substr(firstSlash + 1, secondSlash - firstSlash - 1);
-                            if (!vtStr.empty())
-                                vtIdx = stoi(vtStr) - 1;
-                            vnIdx = stoi(vertexStr.substr(secondSlash + 1)) - 1;
-                        }
-                        else
-                        {
-                            vtIdx = stoi(vertexStr.substr(firstSlash + 1)) - 1;
-                        }
-                    }
-                    else
-                    {
-                        vIdx = stoi(vertexStr) - 1;
-                    }
-
-                    Vertex vertex;
-                    vertex.Position = temp_positions[vIdx];
-                    if (vtIdx >= 0 && vtIdx < temp_texcoords.size())
-                        vertex.TexCoords = temp_texcoords[vtIdx];
-                    if (vnIdx >= 0 && vnIdx < temp_normals.size())
-                        vertex.Normal = temp_normals[vnIdx];
-
-                    vertices.push_back(vertex);
-                    indices.push_back(indices.size());
-                }
-            }
+            cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << endl;
+            return;
         }
-        vector<Texture> textures;
-        meshes.push_back(Mesh(vertices, indices, textures));
+        processNode(scene->mRootNode, scene);
     }
 
-    // --- 2. TINYGLTF LOADER (For GLTF) ---
+    void processNode(aiNode *node, const aiScene *scene)
+    {
+        for (unsigned int i = 0; i < node->mNumMeshes; i++)
+        {
+            aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
+            meshes.push_back(processMesh(mesh, scene));
+        }
+        for (unsigned int i = 0; i < node->mNumChildren; i++)
+        {
+            processNode(node->mChildren[i], scene);
+        }
+    }
+
+    Mesh processMesh(aiMesh *mesh, const aiScene *scene)
+    {
+        vector<Vertex> vertices;
+        vector<unsigned int> indices;
+        vector<Texture> textures;
+
+        for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+        {
+            Vertex vertex;
+            glm::vec3 vector;
+
+            vector.x = mesh->mVertices[i].x;
+            vector.y = mesh->mVertices[i].y;
+            vector.z = mesh->mVertices[i].z;
+            vertex.Position = vector;
+
+            if (mesh->HasNormals())
+            {
+                vector.x = mesh->mNormals[i].x;
+                vector.y = mesh->mNormals[i].y;
+                vector.z = mesh->mNormals[i].z;
+                vertex.Normal = vector;
+            }
+
+            if (mesh->mTextureCoords[0])
+            {
+                glm::vec2 vec;
+                vec.x = mesh->mTextureCoords[0][i].x;
+                vec.y = mesh->mTextureCoords[0][i].y;
+                vertex.TexCoords = vec;
+            }
+            else
+            {
+                vertex.TexCoords = glm::vec2(0.0f, 0.0f);
+            }
+            vertices.push_back(vertex);
+        }
+
+        for (unsigned int i = 0; i < mesh->mNumFaces; i++)
+        {
+            aiFace face = mesh->mFaces[i];
+            for (unsigned int j = 0; j < face.mNumIndices; j++)
+                indices.push_back(face.mIndices[j]);
+        }
+        return Mesh(vertices, indices, textures);
+    }
+
+    // --- TINYGLTF LOADER ---
     void loadGLTF(string const &path)
     {
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
         string err, warn;
         bool ret = false;
-
         if (path.find(".glb") != string::npos)
             ret = loader.LoadBinaryFromFile(&model, &err, &warn, path);
         else
@@ -287,7 +297,6 @@ private:
     {
         vector<Vertex> vertices;
         vector<unsigned int> indices;
-
         const float *posBuffer = nullptr;
         const float *normBuffer = nullptr;
         const float *texBuffer = nullptr;
@@ -348,7 +357,7 @@ private:
     }
 };
 
-// --- ROBUST TEXTURE LOADER ---
+// --- TEXTURE LOADER ---
 unsigned int TextureFromFile(const char *path, const string &directory, bool gamma)
 {
     string filename = string(path);
@@ -359,33 +368,25 @@ unsigned int TextureFromFile(const char *path, const string &directory, bool gam
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
-
-    // FIX 1: FORCE 4 CHANNELS (Fixes slanted textures)
     unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 4);
 
     if (data)
     {
         glBindTexture(GL_TEXTURE_2D, textureID);
-        // FIX 2: ALIGNMENT (Fixes browser crashes on odd-sized images)
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
         stbi_image_free(data);
     }
     else
     {
-        // Helpful debugging
-        std::cout << "Texture failed to load at path: " << path << std::endl;
+        cout << "Texture failed to load: " << path << endl;
         stbi_image_free(data);
     }
-
     return textureID;
 }
 #endif

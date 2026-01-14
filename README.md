@@ -66,3 +66,20 @@ emcc src/main.cpp src/tinygltf.cpp -o build-wasm/index.js \
   -fexceptions \
   --preload-file src/res@/res \
   -O2
+
+
+  to build assimp
+  rm -rf * # 2. Configure with INTERNAL ZLIB enabled
+emcmake cmake .. \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=OFF \
+  -DASSIMP_BUILD_TESTS=OFF \
+  -DASSIMP_NO_EXPORT=ON \
+  -DASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT=OFF \
+  -DASSIMP_BUILD_OBJ_IMPORTER=ON \
+  -DASSIMP_BUILD_GLTF_IMPORTER=ON \
+  -DASSIMP_BUILD_ASSIMP_TOOLS=OFF \
+  -DASSIMP_INJECT_DEBUG_POSTFIX=OFF \
+  -DASSIMP_BUILD_ZLIB=ON
+
+  emmake make -j4
