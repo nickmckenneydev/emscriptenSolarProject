@@ -7,7 +7,7 @@
 #include "shader.h"
 #include "camera.h"
 #include "model.h"
-
+#include "mesh.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
