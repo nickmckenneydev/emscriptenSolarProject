@@ -19,35 +19,28 @@
 GLFWwindow *window;
 Camera camera(glm::vec3(15.0f, 5.0f, 13.0f));
 
-// Timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
-// Mouse State
 float lastX = 800.0f / 2.0f;
 float lastY = 600.0f / 2.0f;
 bool firstMouse = true;
 
-// Screen Settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-// Global Objects
 Shader *planetsShader = nullptr;
 Model *modelObjectMercury = nullptr;
 Model *sunGLTF = nullptr;
 Model *backpack = nullptr;
 
-// Texture IDs
 unsigned int WindowDiffuseMap;
 unsigned int WallDiffuseMap;
-unsigned int WhiteTexture; // optimization: created once, used many times
+unsigned int WhiteTexture;
 
-// Geometry
 unsigned int PlanetsVAO, rightplaneVAO, allOtherPlanesVAO;
-unsigned int VBO[3]; // We use 3 buffers in the code below
+unsigned int VBO[3];
 
-// Lighting Data
 glm::vec3 pointLightPositions[] = {
     glm::vec3(8.0f, 0.0f, 0.0f),
 };
@@ -66,24 +59,20 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount
 
 void main_loop()
 {
-    // 1. Time Logic
+
     float currentFrame = static_cast<float>(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 
-    // 2. Input
     processInput(window);
 
-    // 3. Clear Screen
     glClearColor(0.07f, 0.13f, 0.17f, 1.0f);
     glClearStencil(0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    // 4. Matrix Setup
     glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     glm::mat4 view = camera.GetViewMatrix();
 
-    // 5. Shader Uniforms (Global)
     planetsShader->use();
     planetsShader->setMat4("projection", projection);
     planetsShader->setMat4("view", view);
@@ -108,13 +97,13 @@ void main_loop()
     planetsShader->setFloat("pointLights[0].linear", 0.09f);
     planetsShader->setFloat("pointLights[0].quadratic", 0.032f);
 
-    // 6. Global Render State
+    // Global Render State
     glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glEnable(GL_STENCIL_TEST);
 
-    // A. Interior Walls (Use White Texture)
+    // Interior Walls
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
     glFrontFace(GL_CCW);
@@ -125,7 +114,7 @@ void main_loop()
 
     draw(*planetsShader, PlanetsVAO, WhiteTexture, 36);
 
-    // B. Windows (Transparent-ish logic)
+    // B. Windows
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
@@ -143,7 +132,7 @@ void main_loop()
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
     draw(*planetsShader, allOtherPlanesVAO, WindowDiffuseMap, 18);
 
-    // C. Exterior Walls
+    // Exterior Walls
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glStencilMask(0x00);
@@ -151,7 +140,7 @@ void main_loop()
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     draw(*planetsShader, PlanetsVAO, WallDiffuseMap, 36);
 
-    // D. Sun Model
+    // Sun Model
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(0.2f));
     planetsShader->setMat4("model", model);
@@ -160,7 +149,7 @@ void main_loop()
     glStencilFunc(GL_EQUAL, 1, 0xFF);
     sunGLTF->Draw(*planetsShader);
 
-    // E. Mercury Model
+    // Mercury Model
     model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(3.0f));
     model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
@@ -170,7 +159,7 @@ void main_loop()
 
     modelObjectMercury->Draw(*planetsShader);
 
-    // F. Backpack Model
+    // Backpack Model
     model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(1.2f));
     planetsShader->setMat4("model", model);
