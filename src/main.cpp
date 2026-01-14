@@ -8,18 +8,14 @@
 #include "camera.h"
 #include "model.h"
 
-// Vendor Headers (Available via -I src/vendor)
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "stb_image.h" // Declaration only (Implementation in Texture.cpp)
+#include "stb_image.h"
 #include <fstream>
 #include <iostream>
 #include <vector>
 
-// ==========================================================================
-// GLOBAL STATE
-// ==========================================================================
 GLFWwindow *window;
 Camera camera(glm::vec3(15.0f, 5.0f, 13.0f));
 
@@ -58,9 +54,6 @@ glm::vec3 pointLightPositions[] = {
 glm::vec3 pointLightColors[] = {
     glm::vec3(0.75f, 0.0f, 1.0f)};
 
-// ==========================================================================
-// FORWARD DECLARATIONS
-// ==========================================================================
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
@@ -71,9 +64,6 @@ unsigned int createWhiteTexture();
 // Draw helper
 void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount, unsigned int SpecularMap = 0);
 
-// ==========================================================================
-// MAIN LOOP (Called every frame)
-// ==========================================================================
 void main_loop()
 {
     // 1. Time Logic
@@ -123,8 +113,6 @@ void main_loop()
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glEnable(GL_STENCIL_TEST);
-
-    // --- DRAW SCENE ---
 
     // A. Interior Walls (Use White Texture)
     glEnable(GL_CULL_FACE);
@@ -198,9 +186,6 @@ void main_loop()
     glfwPollEvents();
 }
 
-// ==========================================================================
-// MAIN
-// ==========================================================================
 int main()
 {
     if (!glfwInit())
@@ -223,17 +208,12 @@ int main()
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    // --- FIX 1: CAPTURE MOUSE ---
-    // This tells the browser to Lock the Pointer when you click the canvas.
-    // Without this, the camera stops moving (looks frozen).
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     stbi_set_flip_vertically_on_load(true);
 
-    // 1. Create White Texture
     WhiteTexture = createWhiteTexture();
 
-    // 2. Load Shaders
     planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
     std::cout << "--- FILE SYSTEM CHECK ---" << std::endl;
     std::ifstream f("res/models/mercury/Mercury.obj");
@@ -249,9 +229,7 @@ int main()
         std::cout << "FAILURE: 'Mercury.obj' DOES NOT EXIST." << std::endl;
     }
     std::cout << "-------------------------" << std::endl;
-    // 3. Load Models
 
-    // Mercury
     try
     {
         std::cout << "Loading Mercury..." << std::endl;
@@ -405,22 +383,16 @@ int main()
 
     return 0;
 }
-// ==========================================================================
-// HELPERS
-// ==========================================================================
 
-// Optimized Draw Call
 void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount, unsigned int SpecularMap)
 {
     shader.use();
     glBindVertexArray(VAO);
 
-    // Bind Diffuse
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, DiffuseMap);
     shader.setInt("material.diffuse", 0);
 
-    // Bind Specular (Optional)
     if (SpecularMap != 0)
     {
         glActiveTexture(GL_TEXTURE1);
@@ -428,7 +400,6 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount
         shader.setInt("material.specular", 1);
     }
 
-    // Default Model Matrix (Rotates the object)
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(10.0f));
     model = glm::rotate(model, (float)glfwGetTime() * 0.05f, glm::vec3(0.0, 1.0, 0.0));
@@ -437,7 +408,6 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount
     glDrawArrays(GL_TRIANGLES, 0, verticesCount);
 }
 
-// Create a simple 1x1 white texture for untextured objects
 unsigned int createWhiteTexture()
 {
     unsigned int textureID;
@@ -457,7 +427,6 @@ unsigned int loadTexture(char const *path)
 
     int width, height, nrComponents;
 
-    // FORCE 4 CHANNELS (RGBA) - Fixes color shifting issues
     unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 4);
 
     if (data)
@@ -466,7 +435,6 @@ unsigned int loadTexture(char const *path)
 
         glBindTexture(GL_TEXTURE_2D, textureID);
 
-        // CRITICAL FIX: Disable 4-byte alignment restriction
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);

@@ -83,3 +83,10 @@ emcmake cmake .. \
   -DASSIMP_BUILD_ZLIB=ON
 
   emmake make -j4
+
+
+
+
+
+  MOST RECENT COMPILE 
+  emcc src/main.cpp src/tinygltf.cpp -o build-wasm/index.js   -I src/vendor   -I src   -I src/vendor/assimp/include   -I src/vendor/assimp/build_wasm/include   -L src/vendor/assimp/build_wasm/lib   -lassimp   -s USE_WEBGL2=1   -s FULL_ES3=1   -s USE_GLFW=3   -s ALLOW_MEMORY_GROWTH=1   -s ASSERTIONS=1   -fexceptions   --preload-file src/res@/res   -O2

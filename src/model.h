@@ -7,7 +7,6 @@
 #include "stb_image.h"
 #include "shader.h"
 
-// --- ASSIMP HEADERS ---
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -19,7 +18,6 @@
 #include <vector>
 #include <map>
 
-// --- TINYGLTF HEADERS ---
 #ifndef TINYGLTF_NO_INCLUDE_STB_IMAGE
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE
 #endif
@@ -49,7 +47,6 @@ struct Texture
     string path;
 };
 
-// --- MESH CLASS ---
 class Mesh
 {
 public:
@@ -116,7 +113,6 @@ private:
 
 unsigned int TextureFromFile(const char *path, const string &directory, bool gamma = false);
 
-// --- MODEL CLASS ---
 class Model
 {
 public:
@@ -165,15 +161,14 @@ private:
         }
         else
         {
-            // Assimp for OBJ
+
             loadOBJ(path);
         }
     }
 
-    // --- ASSIMP LOADER (UPDATED: Read from Memory) ---
     void loadOBJ(string const &path)
     {
-        // 1. Read file manually into a buffer
+
         std::ifstream file(path, std::ios::binary | std::ios::ate);
         if (!file.is_open())
         {
@@ -189,14 +184,12 @@ private:
             return;
         }
 
-        // 2. Pass buffer to Assimp with "obj" hint
         Assimp::Importer importer;
         const aiScene *scene = importer.ReadFileFromMemory(
             buffer.data(),
             size,
             aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_JoinIdenticalVertices,
-            "obj" // <--- FORCE OBJ FORMAT
-        );
+            "obj");
 
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         {
@@ -266,7 +259,6 @@ private:
         return Mesh(vertices, indices, textures);
     }
 
-    // --- TINYGLTF LOADER ---
     void loadGLTF(string const &path)
     {
         tinygltf::Model model;
@@ -357,7 +349,6 @@ private:
     }
 };
 
-// --- TEXTURE LOADER ---
 unsigned int TextureFromFile(const char *path, const string &directory, bool gamma)
 {
     string filename = string(path);
