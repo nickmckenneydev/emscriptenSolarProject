@@ -18,7 +18,7 @@
 #include <cstdlib>
 #include <random>
 GLFWwindow *window;
-Camera camera(glm::vec3(15.0f, 5.0f, 13.0f));
+Camera camera(glm::vec3(0.0f, 0.0f, 20.0f));
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -140,35 +140,40 @@ void main_loop()
     draw(*planetsShader, WallsVAO, WallDiffuseMap, 36);
 
     // Sun Model
+    glStencilMask(0x00);
+    glStencilFunc(GL_EQUAL, 1, 0xFF);
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(0.2f));
     planetsShader->setMat4("model", model);
-    glStencilMask(0x00);
-    glStencilFunc(GL_EQUAL, 1, 0xFF);
     sunGLTF->Draw(*planetsShader);
-
     // Mercury Model
     model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(3.0f));
     model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
     model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * 5.5f, glm::vec3(0.0, 1.0, 0.0));
+    model = glm::rotate(model, (float)glfwGetTime() * 7.5f, glm::vec3(0.0, 1.0, 0.0));
     planetsShader->setMat4("model", model);
     modelObjectMercury->Draw(*planetsShader);
-    // Backpack Model
-    // model = glm::mat4(1.0f);
-    // model = glm::scale(model, glm::vec3(1.2f));
-    // planetsShader->setMat4("model", model);
-
-    // glStencilMask(0x00);
-    // glStencilFunc(GL_EQUAL, 2, 0xFF);
-    // backpack->Draw(*planetsShader);
-
     // Pixels!!!!
-    planetsShader->use();
+    model = glm::mat4(1.0f);
+    pointsBlob->Draw(*planetsShader);
+    //-----------------------------------------------------------------------//
+    // Backpack Model
     glStencilMask(0x00);
     glStencilFunc(GL_EQUAL, 2, 0xFF);
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(1.2f));
+    planetsShader->setMat4("model", model);
+    backpack->Draw(*planetsShader);
+    // Pixels!!!!
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(3.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
+    model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 7.5f, glm::vec3(0.0, 1.0, 0.0));
+    planetsShader->setMat4("model", model);
     pointsBlob->Draw(*planetsShader);
+    //-----------------------------------------------------------------------//
 
     // Reset State
     glStencilMask(0xFF);
@@ -256,15 +261,15 @@ int main()
     std::cout << "Loading Points..." << std::endl;
     std::random_device randomDevice;
     std::mt19937 gen(randomDevice());
-    std::uniform_real_distribution<float> dis(-5.0f, 5.0f);
+    std::uniform_real_distribution<float> dis(-50.0f, 50.0f);
 
     vector<Vertex> PointVertices;
     vector<unsigned int> indices;
     vector<Texture> textures;
 
-    float pixelSize = 0.01f;
+    float pixelSize = 0.05f;
 
-    for (unsigned int i = 0; i < 10000; i++)
+    for (unsigned int i = 0; i < 100000; i++)
     {
         glm::vec3 center(dis(gen), dis(gen), dis(gen));
 
@@ -417,7 +422,7 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(10.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * 0.05f, glm::vec3(0.0, 1.0, 0.0));
+    model = glm::rotate(model, (float)glfwGetTime() * 1.0f, glm::vec3(0.0, 1.0, 0.0));
     shader.setMat4("model", model);
 
     glDrawArrays(GL_TRIANGLES, 0, verticesCount);
