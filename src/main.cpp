@@ -3,7 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <GLES3/gl3.h>
 
-// Project Headers
+// Project Header
 #include "shader.h"
 #include "camera.h"
 #include "model.h"
