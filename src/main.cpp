@@ -18,7 +18,7 @@
 #include <cstdlib>
 #include <random>
 GLFWwindow *window;
-Camera camera(glm::vec3(0.0f, 0.0f, 20.0f));
+Camera camera(glm::vec3(0.0f, 3.0f, 33.0f));
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -35,17 +35,18 @@ Model *modelObjectMercury = nullptr;
 Model *sunGLTF = nullptr;
 Model *backpack = nullptr;
 Mesh *pointsBlob = nullptr;
+bool doRotate = true;
 unsigned int WindowDiffuseMap;
 unsigned int WallDiffuseMap;
 unsigned int WhiteTexture;
 
-unsigned int WallsVAO, rightplaneVAO, allOtherPlanesVAO;
-unsigned int VBO[4];
+unsigned int WallsVAO, planeOneVAO, planeTwoVAO, planeThreeVAO, planeFourVAO, spaceFabricPlaneVAO;
+unsigned int VBO[8];
 glm::vec3 pointLightPositions[] = {
-    glm::vec3(8.0f, 0.0f, 0.0f),
+    glm::vec3(0.0f, 0.0f, 0.0f),
 };
 glm::vec3 pointLightColors[] = {
-    glm::vec3(0.75f, 0.0f, 1.0f)};
+    glm::vec3(1.0f, 0.0f, 0.0f)};
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
@@ -111,32 +112,44 @@ void main_loop()
     glStencilMask(0x00);
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
     draw(*planetsShader, WallsVAO, WhiteTexture, 36);
 
-    // Windows
+    // // Windows
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     glDepthMask(GL_FALSE);
 
-    // Right Window
+    // // Plane One Window
     glStencilMask(0xFF);
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    draw(*planetsShader, rightplaneVAO, WindowDiffuseMap, 6);
+    draw(*planetsShader, planeOneVAO, WindowDiffuseMap, 6);
 
-    // Other Windows
+    // Plane Two Window
     glStencilMask(0xFF);
     glStencilFunc(GL_NOTEQUAL, 0x2, 0xFF);
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    draw(*planetsShader, allOtherPlanesVAO, WindowDiffuseMap, 18);
-
+    draw(*planetsShader, planeTwoVAO, WindowDiffuseMap, 6);
+    // Plane Three Window
+    glStencilMask(0xFF);
+    glStencilFunc(GL_NOTEQUAL, 0x3, 0xFF);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    draw(*planetsShader, planeThreeVAO, WindowDiffuseMap, 6);
+    // Plane Four Window
+    glStencilMask(0xFF);
+    glStencilFunc(GL_NOTEQUAL, 0x4, 0xFF);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    draw(*planetsShader, planeFourVAO, WindowDiffuseMap, 6);
     // Exterior Walls
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glStencilMask(0x00);
     glStencilFunc(GL_EQUAL, 0, 0xFF);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    draw(*planetsShader, spaceFabricPlaneVAO, WindowDiffuseMap, 6);
+
     draw(*planetsShader, WallsVAO, WallDiffuseMap, 36);
 
     // Sun Model
@@ -146,6 +159,7 @@ void main_loop()
     model = glm::scale(model, glm::vec3(0.2f));
     planetsShader->setMat4("model", model);
     sunGLTF->Draw(*planetsShader);
+
     // Mercury Model
     model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(3.0f));
@@ -174,7 +188,31 @@ void main_loop()
     planetsShader->setMat4("model", model);
     pointsBlob->Draw(*planetsShader);
     //-----------------------------------------------------------------------//
-
+    // Backpack Model
+    glm::vec3 pointLightColors[] = {
+        glm::vec3(0.0f, 0.0f, 0.0f)};
+    glStencilMask(0x00);
+    glStencilFunc(GL_EQUAL, 4, 0xFF);
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(1.2f));
+    planetsShader->setMat4("model", model);
+    backpack->Draw(*planetsShader);
+    // Pixels!!!!
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(3.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
+    model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
+    model = glm::rotate(model, (float)glfwGetTime() * 7.5f, glm::vec3(0.0, 1.0, 0.0));
+    planetsShader->setMat4("model", model);
+    pointsBlob->Draw(*planetsShader);
+    //-----------------------------------------------------------------------//
+    // Backpack Model
+    glStencilMask(0x00);
+    glStencilFunc(GL_EQUAL, 3, 0xFF);
+    model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(1.2f));
+    planetsShader->setMat4("model", model);
+    backpack->Draw(*planetsShader);
     // Reset State
     glStencilMask(0xFF);
 
@@ -212,53 +250,18 @@ int main()
 
     planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
 
-    std::cout << "--- FILE SYSTEM CHECK ---" << std::endl;
-    std::ifstream f("res/models/mercury/Mercury.obj");
-    if (f.good())
-    {
-        std::cout << "SUCCESS: 'Mercury.obj' found!" << std::endl;
-        std::string firstLine;
-        std::getline(f, firstLine);
-        std::cout << "FIRST LINE: " << firstLine << std::endl;
-    }
-    else
-    {
-        std::cout << "FAILURE: 'Mercury.obj' DOES NOT EXIST." << std::endl;
-    }
-    std::cout << "-------------------------" << std::endl;
-    try
-    {
-        std::cout << "Loading Mercury..." << std::endl;
-        modelObjectMercury = new Model("res/models/mercury/Mercury.obj");
-        modelObjectMercury->SetDiffuseTexture("res/models/mercury/diffuse.png");
-    }
-    catch (std::exception &e)
-    {
-        std::cout << "CRITICAL MODEL ERROR: " << e.what() << std::endl;
-    }
-    try
-    {
-        std::cout << "Loading backpack..." << std::endl;
-        backpack = new Model("res/models/backpack/backpack.obj");
-        backpack->SetDiffuseTexture("res/models/backpack/diffuse.jpg");
-    }
-    catch (std::exception &e)
-    {
-        std::cout << "CRITICAL MODEL ERROR: " << e.what() << std::endl;
-    }
-    try
-    {
-        std::cout << "Loading SUN..." << std::endl;
-        sunGLTF = new Model("res/models/sun/scene.gltf");
-        sunGLTF->SetDiffuseTexture("res/models/sun/textures/material_1_baseColor.png");
-    }
-    catch (std::exception &e)
-    {
-        std::cout << "CRITICAL MODEL ERROR: " << e.what() << std::endl;
-    }
+    modelObjectMercury = new Model("res/models/mercury/Mercury.obj");
+    modelObjectMercury->SetDiffuseTexture("res/models/mercury/diffuse.png");
+
+    backpack = new Model("res/models/backpack/backpack.obj");
+    backpack->SetDiffuseTexture("res/models/backpack/diffuse.jpg");
+
+    sunGLTF = new Model("res/models/sun/scene.gltf");
+    sunGLTF->SetDiffuseTexture("res/models/sun/textures/material_1_baseColor.png");
+
     WindowDiffuseMap = loadTexture("res/textures/purple.jpeg");
     WallDiffuseMap = loadTexture("res/textures/wall.jpg");
-    std::cout << "Loading Points..." << std::endl;
+
     std::random_device randomDevice;
     std::mt19937 gen(randomDevice());
     std::uniform_real_distribution<float> dis(-50.0f, 50.0f);
@@ -350,40 +353,49 @@ int main()
         0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
         -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
         -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
-
-    float rightplane_vertices[] = {
+    float planeOneVerticies[] = {
         0.5f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.625f, 0.5f,
         0.5f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.375f, 0.75f,
         0.5f, -0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.375f, 0.5f,
         0.5f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.625f, 0.5f,
         0.5f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.625f, 0.75f,
         0.5f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.375f, 0.75f};
-
-    float frontface_vertices[] = {
+    float planeTwoVerticies[] = {
         0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.625f, 0.75f,
         -0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.375f, 1.0f,
         0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.375f, 0.75f,
         0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.625f, 0.75f,
         -0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.625f, 1.0f,
-        -0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.375f, 1.0f,
-        // Left
+        -0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.375f, 1.0f};
+    float planeThreeVerticies[] = {
         -0.5f, 0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.625f, 0.5f,
         -0.5f, -0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.375f, 0.75f,
         -0.5f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.375f, 0.5f,
         -0.5f, 0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.625f, 0.5f,
         -0.5f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.625f, 0.75f,
-        -0.5f, -0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.375f, 0.75f,
-        // Back
+        -0.5f, -0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.375f, 0.75f};
+    float planeFourVerticies[] = {
         0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.625f, 0.75f,
         -0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.375f, 1.0f,
         -0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.375f, 0.75f,
         0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.625f, 0.75f,
         0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.625f, 1.0f,
         -0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.375f, 1.0f};
+    float spaceFabricVertices[] = {
+        15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 0.0f,
+        -15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+        -15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 2.0f,
+
+        15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 0.0f,
+        -15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 2.0f,
+        15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 2.0f};
 
     genVertexAttribs(&WallsVAO, vertices, &VBO[0], sizeof(vertices));
-    genVertexAttribs(&rightplaneVAO, rightplane_vertices, &VBO[1], sizeof(rightplane_vertices));
-    genVertexAttribs(&allOtherPlanesVAO, frontface_vertices, &VBO[2], sizeof(frontface_vertices));
+    genVertexAttribs(&planeOneVAO, planeOneVerticies, &VBO[1], sizeof(planeOneVerticies));
+    genVertexAttribs(&planeTwoVAO, planeTwoVerticies, &VBO[2], sizeof(planeTwoVerticies));
+    genVertexAttribs(&planeThreeVAO, planeThreeVerticies, &VBO[3], sizeof(planeThreeVerticies));
+    genVertexAttribs(&planeFourVAO, planeFourVerticies, &VBO[4], sizeof(planeFourVerticies));
+    genVertexAttribs(&spaceFabricPlaneVAO, spaceFabricVertices, &VBO[5], sizeof(spaceFabricVertices));
 
     emscripten_set_main_loop(main_loop, 0, 1);
 
@@ -422,10 +434,13 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(10.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * 1.0f, glm::vec3(0.0, 1.0, 0.0));
+    if (doRotate == true)
+        model = glm::rotate(model, (float)glfwGetTime() * 1.0f, glm::vec3(0.0, 1.0, 0.0));
     shader.setMat4("model", model);
 
     glDrawArrays(GL_TRIANGLES, 0, verticesCount);
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 unsigned int createWhiteTexture()
@@ -451,13 +466,12 @@ unsigned int loadTexture(char const *path)
 
     if (data)
     {
-        GLenum format = GL_RGBA;
 
         glBindTexture(GL_TEXTURE_2D, textureID);
 
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
