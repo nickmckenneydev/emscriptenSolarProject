@@ -57,7 +57,7 @@ unsigned int createWhiteTexture();
 void genVertexAttribs(GLuint *VAO, float *verticesName, GLuint *VBO, int size);
 
 void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, int verticesCount, unsigned int SpecularMap = 0);
-
+// test
 void main_loop()
 {
 
