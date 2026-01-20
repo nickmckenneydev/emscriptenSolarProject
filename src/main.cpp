@@ -249,8 +249,8 @@ int main()
 
     stbi_set_flip_vertically_on_load(true);
 
-    InteriorWallTexture = createInteriorWallTexture();
-
+    // InteriorWallTexture = createInteriorWallTexture();
+    InteriorWallTexture = loadTexture("res/textures/purple.jpeg");
     planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
 
     modelObjectMercury = new Model("res/models/mercury/Mercury.obj");
@@ -399,7 +399,6 @@ int main()
         15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 0.0f,
         -15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 2.0f,
         15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 2.0f};
-
     genVertexAttribs(&WallsVAO, vertices, &VBO[0], sizeof(vertices));
     genVertexAttribs(&planeOneVAO, planeOneVerticies, &VBO[1], sizeof(planeOneVerticies));
     genVertexAttribs(&planeTwoVAO, planeTwoVerticies, &VBO[2], sizeof(planeTwoVerticies));
@@ -456,17 +455,17 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, unsigned int Spec
     glActiveTexture(GL_TEXTURE0);
 }
 
-unsigned int createInteriorWallTexture()
-{
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    unsigned char white[] = {255, 255, 255, 0};
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    return textureID;
-}
+// unsigned int createInteriorWallTexture()
+// {
+//     unsigned int textureID;
+//     glGenTextures(1, &textureID);
+//     glBindTexture(GL_TEXTURE_2D, textureID);
+//     unsigned char white[] = {255, 255, 255, 100};
+//     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+//     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+//     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+//     return textureID;
+// }
 
 unsigned int loadTexture(char const *path)
 {
