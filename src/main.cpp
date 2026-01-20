@@ -47,7 +47,7 @@ Mesh *pointsBlob = nullptr;
 bool doRotate = true;
 unsigned int WindowDiffuseMap;
 unsigned int WallDiffuseMap;
-unsigned int WhiteTexture;
+unsigned int InteriorWallTexture;
 unsigned int FloorDiffuseMap;
 unsigned int WallsVAO, planeOneVAO, planeTwoVAO, planeThreeVAO, planeFourVAO, spaceFabricPlaneVAO;
 unsigned int VBO[8];
@@ -57,7 +57,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 unsigned int loadTexture(const char *path);
-unsigned int createWhiteTexture();
+unsigned int createInteriorWallTexture();
 void genVertexAttribs(GLuint *VAO, float *verticesName, GLuint *VBO, int size);
 
 void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, unsigned int SpecularMap, int verticesCount, glm::vec3 localCenter);
@@ -98,38 +98,37 @@ void main_loop()
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-    draw(*planetsShader, WallsVAO, WhiteTexture, WhiteTexture, 36, glm::vec3(0.0f, 0.0f, 0.0f));
+    draw(*planetsShader, WallsVAO, InteriorWallTexture, InteriorWallTexture, 36, glm::vec3(0.0f, 0.0f, 0.0f));
 
     // // Windows
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    // // Plane One Window
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.0f, -1.0f);
-    glEnable(GL_BLEND);
+    // Window 1
+
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glStencilMask(0xFF);
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    draw(*planetsShader, planeOneVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.5f, 0.0f, 0.0f));
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    glDisable(GL_BLEND);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-    // Plane Two Window
+    draw(*planetsShader, planeOneVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.5f, 0.0f, 0.0f));
+
+    // Window 2
     glStencilMask(0xFF);
     glStencilFunc(GL_NOTEQUAL, 0x2, 0xFF);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
     draw(*planetsShader, planeTwoVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.0f, 0.0f, 0.5f)); // Plane Three Window
     glStencilMask(0xFF);
     glStencilFunc(GL_NOTEQUAL, 0x3, 0xFF);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    // Window 3
     draw(*planetsShader, planeThreeVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(-0.5f, 0.0f, 0.0f)); // Plane Four Window
     glStencilMask(0xFF);
     glStencilFunc(GL_NOTEQUAL, 0x4, 0xFF);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
+    // Window 4
     draw(*planetsShader, planeFourVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.0f, 0.0f, -0.5f)); // Exterior Walls
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
@@ -139,7 +138,7 @@ void main_loop()
     draw(*planetsShader, spaceFabricPlaneVAO, FloorDiffuseMap, FloorDiffuseMap, 6, glm::vec3(0.0f, -0.5f, 0.0f));
     draw(*planetsShader, WallsVAO, WallDiffuseMap, WindowDiffuseMap, 36, glm::vec3(0.0f, 0.0f, 0.0f));
     //-----------------------------------------------------------------------//
-
+    glDisable(GL_BLEND);
     // Sun Model
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(1.0f, 1.0f);
@@ -250,7 +249,7 @@ int main()
 
     stbi_set_flip_vertically_on_load(true);
 
-    WhiteTexture = createWhiteTexture();
+    InteriorWallTexture = createInteriorWallTexture();
 
     planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
 
@@ -448,8 +447,8 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, unsigned int Spec
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::scale(model, glm::vec3(10.0f));
-    if (doRotate)
-        model = glm::rotate(model, (float)glfwGetTime() * 1.0f, glm::vec3(0.0, 1.0, 0.0));
+    // if (doRotate)
+    //     model = glm::rotate(model, (float)glfwGetTime() * 1.0f, glm::vec3(0.0, 1.0, 0.0));
     shader.setMat4("model", model);
 
     glDrawArrays(GL_TRIANGLES, 0, verticesCount);
@@ -457,12 +456,12 @@ void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, unsigned int Spec
     glActiveTexture(GL_TEXTURE0);
 }
 
-unsigned int createWhiteTexture()
+unsigned int createInteriorWallTexture()
 {
     unsigned int textureID;
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
-    unsigned char white[] = {255, 255, 255, 255};
+    unsigned char white[] = {255, 255, 255, 0};
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
