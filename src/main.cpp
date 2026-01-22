@@ -56,16 +56,12 @@ void genVertexAttribs(GLuint *VAO, float *verticesName, GLuint *VBO, int size);
 
 void main_loop()
 {
-
     float currentFrame = static_cast<float>(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
-
     processInput(window);
-
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); // don't forget to clear the stencil buffer!
-
     // set uniforms
     shaderSingleColor->use();
     glm::mat4 model = glm::mat4(1.0f);
@@ -73,20 +69,18 @@ void main_loop()
     glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     shaderSingleColor->setMat4("view", view);
     shaderSingleColor->setMat4("projection", projection);
-
     shader->use();
     shader->setMat4("view", view);
     shader->setMat4("projection", projection);
-
     glStencilMask(0x00);
     glBindVertexArray(planeVAO);
     glBindTexture(GL_TEXTURE_2D, floorTexture);
     shader->setMat4("model", glm::mat4(1.0f));
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
-
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     glStencilMask(0xFF);
+
     // cubes
     glBindVertexArray(cubeVAO);
     glActiveTexture(GL_TEXTURE0);
@@ -98,7 +92,6 @@ void main_loop()
     model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
     shader->setMat4("model", model);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-
     glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
     glStencilMask(0x00);
     glDisable(GL_DEPTH_TEST);
@@ -112,11 +105,7 @@ void main_loop()
     model = glm::scale(model, glm::vec3(scale, scale, scale));
     shaderSingleColor->setMat4("model", model);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
-    model = glm::scale(model, glm::vec3(scale, scale, scale));
-    shaderSingleColor->setMat4("model", model);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+
     glBindVertexArray(0);
     glStencilMask(0xFF);
     glStencilFunc(GL_ALWAYS, 0, 0xFF);
