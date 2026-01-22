@@ -39,158 +39,89 @@ bool firstMouse = true;
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-Shader *planetsShader = nullptr;
-Model *modelObjectMercury = nullptr;
-Model *sunGLTF = nullptr;
-Model *backpack = nullptr;
-Mesh *pointsBlob = nullptr;
-bool doRotate = true;
-unsigned int WindowDiffuseMap;
-unsigned int WallDiffuseMap;
 unsigned int InteriorWallTexture;
-
-unsigned int FloorDiffuseMap;
-unsigned int WallsVAO, planeOneVAO, planeTwoVAO, planeThreeVAO, planeFourVAO, spaceFabricPlaneVAO, WallscutoutWallVAO;
-unsigned int VBO[8];
-
+unsigned int quadVBO[1];
+unsigned int cubeVBO[1];
+unsigned int planeVBO[1];
+unsigned int cubeVAO, planeVAO, quadVAO;
+Shader *shader = nullptr;
+Shader *shaderSingleColor = nullptr;
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 unsigned int loadTexture(const char *path);
-
+unsigned int cubeTexture, floorTexture;
 void genVertexAttribs(GLuint *VAO, float *verticesName, GLuint *VBO, int size);
 
-void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, unsigned int SpecularMap, int verticesCount, glm::vec3 localCenter);
-// test
 void main_loop()
 {
+
     float currentFrame = static_cast<float>(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 
     processInput(window);
 
-    // 0. Clear Buffers
-    glClearColor(0.07f, 0.13f, 0.17f, 1.0f);
-    glClearStencil(0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT); // don't forget to clear the stencil buffer!
 
-    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+    // set uniforms
+    shaderSingleColor->use();
+    glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 view = camera.GetViewMatrix();
+    glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+    shaderSingleColor->setMat4("view", view);
+    shaderSingleColor->setMat4("projection", projection);
 
-    planetsShader->use();
-    planetsShader->setMat4("projection", projection);
-    planetsShader->setMat4("view", view);
-    planetsShader->setVec3("viewPos", camera.Position);
+    shader->use();
+    shader->setMat4("view", view);
+    shader->setMat4("projection", projection);
 
-    // Global Render State
-    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glEnable(GL_STENCIL_TEST);
+    glStencilMask(0x00);
+    glBindVertexArray(planeVAO);
+    glBindTexture(GL_TEXTURE_2D, floorTexture);
+    shader->setMat4("model", glm::mat4(1.0f));
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
 
-    // ---------------------------------------------------------
-    // STEP 1: DRAW SOLID WALLS (Stencil = 0)
-    // ---------------------------------------------------------
-    // We draw the box. We write 0 to the stencil so planets don't draw on top of walls.
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);
-    glFrontFace(GL_CCW);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilMask(0xFF);
+    // cubes
+    glBindVertexArray(cubeVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    shader->setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+    shader->setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
 
+    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+    glStencilMask(0x00);
+    glDisable(GL_DEPTH_TEST);
+    shaderSingleColor->use();
+    float scale = 1.1f;
+    // cubes
+    glBindVertexArray(cubeVAO);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    model = glm::scale(model, glm::vec3(scale, scale, scale));
+    shaderSingleColor->setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+    model = glm::scale(model, glm::vec3(scale, scale, scale));
+    shaderSingleColor->setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
     glStencilMask(0xFF);
     glStencilFunc(GL_ALWAYS, 0, 0xFF);
+    glEnable(GL_DEPTH_TEST);
 
-    // Draw the walls (The shell)
-    draw(*planetsShader, WallscutoutWallVAO, InteriorWallTexture, InteriorWallTexture, 108, glm::vec3(0.0f));
-
-    // ---------------------------------------------------------
-    // STEP 2: STENCIL MASKING (Stencil = 1, 2, 3, 4)
-    // ---------------------------------------------------------
-    // We draw the window geometries but INVISIBLE (ColorMask False).
-    // CRITICAL: We use 'WallDiffuseMap' (Solid) so the WHOLE window square gets stamped.
-    // If we used the Window texture, the transparent glass pixels would be discarded and not stamped.
-
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    glDepthMask(GL_FALSE);
-    glStencilMask(0xFF);
-
-    // Window 1 -> Stencil 1
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    draw(*planetsShader, planeOneVAO, WallDiffuseMap, WallDiffuseMap, 6, glm::vec3(0.5f, 0.0f, 0.0f));
-
-    // Window 2 -> Stencil 2
-    glStencilFunc(GL_ALWAYS, 2, 0xFF);
-    draw(*planetsShader, planeTwoVAO, WallDiffuseMap, WallDiffuseMap, 6, glm::vec3(0.0f, 0.0f, 0.5f));
-
-    // Window 3 -> Stencil 3
-    glStencilFunc(GL_ALWAYS, 3, 0xFF);
-    draw(*planetsShader, planeThreeVAO, WallDiffuseMap, WallDiffuseMap, 6, glm::vec3(-0.5f, 0.0f, 0.0f));
-
-    // Window 4 -> Stencil 4
-    glStencilFunc(GL_ALWAYS, 4, 0xFF);
-    draw(*planetsShader, planeFourVAO, WallDiffuseMap, WallDiffuseMap, 6, glm::vec3(0.0f, 0.0f, -0.5f));
-
-    // Re-enable writing
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glDepthMask(GL_TRUE);
-    glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
-    glStencilMask(0x00);
-
-    // Sun Model
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(1.0f, 1.0f);
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::scale(model, glm::vec3(0.2f));
-    planetsShader->setMat4("model", model);
-    sunGLTF->Draw(*planetsShader);
-    glDisable(GL_POLYGON_OFFSET_FILL);
-
-    // Mercury Model
-    model = glm::mat4(1.0f);
-    model = glm::scale(model, glm::vec3(3.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
-    model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * 7.5f, glm::vec3(0.0, 1.0, 0.0));
-    planetsShader->setMat4("model", model);
-    modelObjectMercury->Draw(*planetsShader);
-
-    // Backpack
-    model = glm::mat4(1.0f);
-    model = glm::scale(model, glm::vec3(1.2f));
-    planetsShader->setMat4("model", model);
-    backpack->Draw(*planetsShader);
-
-    // Points
-    model = glm::mat4(1.0f);
-    model = glm::scale(model, glm::vec3(3.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * glm::radians(90.0f), glm::vec3(0.0, 1.0, 0.0));
-    model = glm::translate(model, glm::vec3(2.5f, 0.0f, 0.0f));
-    model = glm::rotate(model, (float)glfwGetTime() * 7.5f, glm::vec3(0.0, 1.0, 0.0));
-    planetsShader->setMat4("model", model);
-    pointsBlob->Draw(*planetsShader);
-
-    // ---------------------------------------------------------
-    // STEP 4: DRAW VISIBLE WINDOWS (Glass & Bars)
-    // ---------------------------------------------------------
-    // Draw the actual window texture on top so we can see the frame/tint.
-    // Use GL_ALWAYS because the glass is transparent and needs to blend over planets.
-
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    glStencilMask(0xFF);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glCullFace(GL_BACK);
-
-    draw(*planetsShader, planeOneVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.5f, 0.0f, 0.0f));
-    draw(*planetsShader, planeTwoVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.0f, 0.0f, 0.5f));
-    draw(*planetsShader, planeThreeVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(-0.5f, 0.0f, 0.0f));
-    draw(*planetsShader, planeFourVAO, WindowDiffuseMap, WindowDiffuseMap, 6, glm::vec3(0.0f, 0.0f, -0.5f));
-
-    glDisable(GL_BLEND);
-
-    // Swap
     glfwSwapBuffers(window);
     glfwPollEvents();
 }
@@ -235,225 +166,89 @@ int main()
 
     stbi_set_flip_vertically_on_load(true);
 
-    InteriorWallTexture = loadTexture("res/textures/purple.jpeg");
-    planetsShader = new Shader("res/shaders/planets.vs", "res/shaders/planets.fs");
-
-    modelObjectMercury = new Model("res/models/mercury/Mercury.obj");
-    modelObjectMercury->SetDiffuseTexture("res/models/mercury/diffuse.png");
-
-    backpack = new Model("res/models/backpack/backpack.obj");
-    backpack->SetDiffuseTexture("res/models/backpack/diffuse.jpg");
-
-    sunGLTF = new Model("res/models/sun/scene.gltf");
-    sunGLTF->SetDiffuseTexture("res/models/sun/textures/material_1_baseColor.png");
-
-    WindowDiffuseMap = loadTexture("res/textures/window.png");
-    WallDiffuseMap = loadTexture("res/textures/wall.jpg");
-    FloorDiffuseMap = loadTexture("res/textures/container.jpg");
-
-    std::random_device randomDevice;
-    std::mt19937 gen(randomDevice());
-    std::uniform_real_distribution<float> dis(-50.0f, 50.0f);
-
-    vector<Vertex> PointVertices;
-    vector<unsigned int> indices;
-    vector<Texture> textures;
-
-    float pixelSize = 0.05f;
-
-    for (unsigned int i = 0; i < 1000; i++)
-    {
-        glm::vec3 center(dis(gen), dis(gen), dis(gen));
-
-        glm::vec3 positions[4] = {
-            center + glm::vec3(-pixelSize, -pixelSize, 0.0f),
-            center + glm::vec3(pixelSize, -pixelSize, 0.0f),
-            center + glm::vec3(pixelSize, pixelSize, 0.0f),
-            center + glm::vec3(-pixelSize, pixelSize, 0.0f)};
-
-        glm::vec2 uvs[4] = {
-            glm::vec2(0.0f, 0.0f),
-            glm::vec2(1.0f, 0.0f),
-            glm::vec2(1.0f, 1.0f),
-            glm::vec2(0.0f, 1.0f)};
-
-        unsigned int startIndex = PointVertices.size();
-        for (int j = 0; j < 4; j++)
-        {
-            Vertex v;
-            v.Position = positions[j];
-            v.Normal = glm::vec3(0.0f, 0.0f, 1.0f);
-            v.TexCoords = uvs[j];
-
-            PointVertices.push_back(v);
-        }
-
-        // 1 QUAD
-        indices.push_back(startIndex + 0);
-        indices.push_back(startIndex + 1);
-        indices.push_back(startIndex + 2);
-        indices.push_back(startIndex + 0);
-        indices.push_back(startIndex + 2);
-        indices.push_back(startIndex + 3);
-    }
-
-    pointsBlob = new Mesh(PointVertices, indices, textures);
+    shader = new Shader("res/shaders/5.1.framebuffers.vs", "res/shaders/5.1.framebuffers.fs");
+    shaderSingleColor = new Shader("res/shaders/5.1.framebuffers_screen.vs", "res/shaders/5.1.framebuffers_screen.fs");
 
     // --- VERTEX DATA ---
-    float cutoutWallVertices[] = {
-        // FRONT FACE (Z = 0.5)
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f,
-        0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f, -0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.2f, -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.8f, 0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.8f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, -0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.8f,
-        -0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.2f, -0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.2f, 0.2f, -0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.2f, 0.8f,
-        -0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.2f, 0.8f, -0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.8f, -0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.2f,
-        0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.8f, 0.2f, 0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f, 0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.8f,
-        0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.8f, 0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.8f, 0.8f, 0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.8f, 0.2f,
+    float cubeVertices[] = {
+        // positions          // texture Coords
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+        0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
+        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
+        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
 
-        // BACK FACE (Z = -0.5)
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, -0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.2f, 0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.2f,
-        0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.2f, 0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,
-        -0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.8f, -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, 0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,
-        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.8f, -0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.8f,
-        0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.2f, 0.2f, 0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.2f, 0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.8f,
-        0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.8f, 0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.2f, 0.8f, 0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.2f, 0.2f,
-        -0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.2f, -0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.8f, 0.2f, -0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.8f, 0.8f,
-        -0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.8f, 0.8f, -0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.8f, -0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.2f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
+        0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 1.0f,
+        -0.5f, 0.5f, 0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
 
-        // LEFT FACE (X = -0.5)
-        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -0.5f, -0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, -0.5f, -0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.2f,
-        -0.5f, -0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.2f, -0.5f, -0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.2f, -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, 0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.8f, -0.5f, 0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.8f, -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-        -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, -0.5f, 0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, -0.5f, 0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.8f,
-        -0.5f, -0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.2f, -0.5f, -0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.2f, 0.2f, -0.5f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.2f, 0.8f,
-        -0.5f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.2f, 0.8f, -0.5f, 0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.8f, -0.5f, -0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.2f,
-        -0.5f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.8f, 0.2f, -0.5f, -0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.2f, -0.5f, 0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.8f,
-        -0.5f, 0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.8f, -0.5f, 0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.8f, 0.8f, -0.5f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.8f, 0.2f,
+        -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
+        -0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
+        -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
 
-        // RIGHT FACE (X = 0.5)
-        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.5f, -0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.2f, 0.5f, -0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.2f,
-        0.5f, -0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.2f, 0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        0.5f, 0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.8f, 0.5f, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.5f, 0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f, 0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.8f,
-        0.5f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.2f, 0.2f, 0.5f, -0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.2f, 0.5f, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f,
-        0.5f, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f, 0.5f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.2f, 0.8f, 0.5f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.2f, 0.2f,
-        0.5f, -0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.2f, 0.5f, -0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.8f, 0.2f, 0.5f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.8f, 0.8f,
-        0.5f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.8f, 0.8f, 0.5f, 0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.8f, 0.5f, -0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.2f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
+        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
+        0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
 
-        // BOTTOM FACE (Y = -0.5)
-        -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-        0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f, -0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        0.5f, -0.5f, -0.5f, 1.0f, 1.0f,
+        0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
+        0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
 
-        // TOP FACE (Y = 0.5)
-        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,
+        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
+        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f,
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f};
+    float planeVertices[] = {
+        // positions          // texture Coords (note we set these higher than 1 (together with GL_REPEAT as texture wrapping mode). this will cause the floor texture to repeat)
+        5.0f, -0.5f, 5.0f, 2.0f, 0.0f,
+        -5.0f, -0.5f, 5.0f, 0.0f, 0.0f,
+        -5.0f, -0.5f, -5.0f, 0.0f, 2.0f,
 
-    float vertices[] = {
-        // Back face (z = -0.5f)
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,
-        0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,
-        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-        -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,
-        // Front face (z = 0.5f)
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-        0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,
-        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
-        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-        // Left face (x = -0.5f)
-        -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        -0.5f, 0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        // Right face (x = 0.5f)
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-        0.5f, 0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        // Bottom face (y = -0.5f)
-        -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f,
-        0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f,
-        0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-        0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-        -0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f,
-        // Top face (y = 0.5f)
-        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-        0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-        -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+        5.0f, -0.5f, 5.0f, 2.0f, 0.0f,
+        -5.0f, -0.5f, -5.0f, 0.0f, 2.0f,
+        5.0f, -0.5f, -5.0f, 2.0f, 2.0f};
+    // cube VAO
 
-    float planeOneVerticies[] = {
-        0.0f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // Top Front
-        0.0f, -0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // Bottom Back
-        0.0f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  // Bottom Front
+    glGenVertexArrays(1, &cubeVAO);
+    glGenBuffers(1, cubeVBO);
+    glBindVertexArray(cubeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, *cubeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    glBindVertexArray(0);
+    // plane VAO
 
-        0.0f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,  // Top Front
-        0.0f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // Top Back
-        0.0f, -0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f // Bottom Back
-    };
+    glGenVertexArrays(1, &planeVAO);
+    glGenBuffers(1, planeVBO);
+    glBindVertexArray(planeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, *planeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), &planeVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    glBindVertexArray(0);
 
-    // Plane Two (Front Face) - Facing +Z
-    // Corrected to be CCW when looking from the Front
-    float planeTwoVerticies[] = {
-        0.3f, 0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // Top Right
-        -0.3f, -0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // Bottom Left
-        0.3f, -0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,  // Bottom Right
-
-        0.3f, 0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,  // Top Right
-        -0.3f, 0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, // Top Left
-        -0.3f, -0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f // Bottom Left
-    };
-
-    // Plane Three (Left Face) - Facing -X
-    // Corrected to be CCW when looking from the Left
-    float planeThreeVerticies[] = {
-        0.0f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,  // Top Back
-        0.0f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,  // Bottom Front
-        0.0f, -0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, // Bottom Back
-
-        0.0f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // Top Back
-        0.0f, 0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // Top Front
-        0.0f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f  // Bottom Front
-    };
-
-    // Plane Four (Back Face) - Facing -Z
-    // Corrected to be CCW when looking from the Back
-    float planeFourVerticies[] = {
-        -0.3f, 0.3f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,  // Top Left
-        0.3f, -0.3f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,  // Bottom Right
-        -0.3f, -0.3f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, // Bottom Left
-
-        -0.3f, 0.3f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, // Top Left
-        0.3f, 0.3f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,  // Top Right
-        0.3f, -0.3f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f  // Bottom Right
-    };
-
-    float spaceFabricVertices[] = {
-        15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 0.0f,
-        -15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-        -15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 2.0f,
-
-        15.0f, -0.5f, 15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 0.0f,
-        -15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 0.0f, 2.0f,
-        15.0f, -0.5f, -15.0f, 0.0f, 0.0f, -1.0f, 2.0f, 2.0f};
-    genVertexAttribs(&WallsVAO, vertices, &VBO[0], sizeof(vertices));
-    genVertexAttribs(&planeOneVAO, planeOneVerticies, &VBO[1], sizeof(planeOneVerticies));
-    genVertexAttribs(&planeTwoVAO, planeTwoVerticies, &VBO[2], sizeof(planeTwoVerticies));
-    genVertexAttribs(&planeThreeVAO, planeThreeVerticies, &VBO[3], sizeof(planeThreeVerticies));
-    genVertexAttribs(&planeFourVAO, planeFourVerticies, &VBO[4], sizeof(planeFourVerticies));
-    genVertexAttribs(&spaceFabricPlaneVAO, spaceFabricVertices, &VBO[5], sizeof(spaceFabricVertices));
-    genVertexAttribs(&WallscutoutWallVAO, cutoutWallVertices, &VBO[6], sizeof(cutoutWallVertices));
+    cubeTexture = loadTexture("res/textures/metal.jpeg");
+    floorTexture = loadTexture("res/textures/metal.jpeg");
 
 // --- The Main Loop Swap ---
 #ifdef __EMSCRIPTEN__
@@ -468,94 +263,11 @@ int main()
     glfwTerminate();
     return 0;
 }
-void genVertexAttribs(GLuint *VAO, float *verticesName, GLuint *VBO, int size)
-{
-    glGenVertexArrays(1, VAO);
-    glGenBuffers(1, VBO);
-    glBindVertexArray(*VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, *VBO);
-    glBufferData(GL_ARRAY_BUFFER, size, verticesName, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-}
-
-void draw(Shader &shader, GLuint VAO, unsigned int DiffuseMap, unsigned int SpecularMap, int verticesCount, glm::vec3 localCenter)
-{
-    shader.use();
-    glBindVertexArray(VAO);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, DiffuseMap);
-
-    shader.setInt("texture1", 0);
-
-    glm::mat4 model = glm::mat4(1.0f);
-
-    if (doRotate)
-        model = glm::rotate(model, (float)glfwGetTime() * 1.0f, glm::vec3(0.0, 1.0, 0.0));
-
-    model = glm::scale(model, glm::vec3(10.0f));
-    model = glm::translate(model, localCenter);
-
-    shader.setMat4("model", model);
-
-    glDrawArrays(GL_TRIANGLES, 0, verticesCount);
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE0);
-}
-
-unsigned int loadTexture(char const *path)
-{
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-
-    int width, height, nrComponents;
-
-    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 4);
-
-    if (data)
-    {
-        glBindTexture(GL_TEXTURE_2D, textureID);
-
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        const char *window = "res/textures/window.png";
-        if (!strcmp(path, window))
-        {
-            cout << path << "is equal to" << window << endl;
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-        else
-        {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            cout << path << "FAILED" << window << endl;
-        }
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        stbi_image_free(data);
-    }
-    else
-    {
-        std::cout << "Texture failed to load: " << path << std::endl;
-        stbi_image_free(data);
-    }
-
-    return textureID;
-}
-
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.ProcessKeyboard(FORWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -566,29 +278,80 @@ void processInput(GLFWwindow *window)
         camera.ProcessKeyboard(RIGHT, deltaTime);
 }
 
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
+// ---------------------------------------------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
+    // make sure the viewport matches the new window dimensions; note that width and
+    // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
 
+// glfw: whenever the mouse moves, this callback is called
+// -------------------------------------------------------
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
+
     if (firstMouse)
     {
         lastX = xpos;
         lastY = ypos;
         firstMouse = false;
     }
+
     float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+
     lastX = xpos;
     lastY = ypos;
+
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
+// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+// ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
+}
+
+// utility function for loading a 2D texture from file
+// ---------------------------------------------------
+unsigned int loadTexture(char const *path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum format;
+        if (nrComponents == 1)
+            format = GL_RED;
+        else if (nrComponents == 3)
+            format = GL_RGB;
+        else if (nrComponents == 4)
+            format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
 }
