@@ -104,7 +104,7 @@ void main_loop()
     glDisable(GL_DEPTH_TEST);
     shaderSingleColor->use();
     float scale = 1.1f;
-    // cubes
+    // cubes PULLED CHANGES
     glBindVertexArray(cubeVAO);
     glBindTexture(GL_TEXTURE_2D, cubeTexture);
     model = glm::mat4(1.0f);
