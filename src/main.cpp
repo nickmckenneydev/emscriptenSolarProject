@@ -50,7 +50,7 @@ unsigned int WallDiffuseMap;
 unsigned int InteriorWallTexture;
 unsigned int SeeThroughInteriorWallTexture;
 unsigned int FloorDiffuseMap;
-unsigned int WallsVAO, planeOneVAO, planeTwoVAO, planeThreeVAO, planeFourVAO, spaceFabricPlaneVAO;
+unsigned int WallsVAO, planeOneVAO, planeTwoVAO, planeThreeVAO, planeFourVAO, spaceFabricPlaneVAO, WallscutoutWallVAO;
 unsigned int VBO[8];
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
@@ -319,7 +319,54 @@ int main()
     }
 
     pointsBlob = new Mesh(PointVertices, indices, textures);
+    float cutoutWallVertices[] = {
+        // FRONT FACE (Z = 0.5)
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f,
+        0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f, -0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.2f, -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.8f, 0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.8f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, -0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.8f,
+        -0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.2f, -0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.2f, 0.2f, -0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.2f, 0.8f,
+        -0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.2f, 0.8f, -0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.8f, -0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.2f,
+        0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.8f, 0.2f, 0.5f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.2f, 0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.8f,
+        0.5f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.8f, 0.3f, 0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.8f, 0.8f, 0.3f, -0.3f, 0.5f, 0.0f, 0.0f, 1.0f, 0.8f, 0.2f,
 
+        // BACK FACE (Z = -0.5)
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, -0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.2f, 0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.2f,
+        0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.2f, 0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,
+        -0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.8f, -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, 0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,
+        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.8f, -0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.8f,
+        0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.2f, 0.2f, 0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.2f, 0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.8f,
+        0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.8f, 0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.2f, 0.8f, 0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.2f, 0.2f,
+        -0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.2f, -0.3f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.8f, 0.2f, -0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.8f, 0.8f,
+        -0.3f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 0.8f, 0.8f, -0.5f, 0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.8f, -0.5f, -0.3f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.2f,
+
+        // LEFT FACE (X = -0.5)
+        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -0.5f, -0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, -0.5f, -0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.2f,
+        -0.5f, -0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.2f, -0.5f, -0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.2f, -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        -0.5f, 0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.8f, -0.5f, 0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.8f, -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, -0.5f, 0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, -0.5f, 0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.8f,
+        -0.5f, -0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.2f, -0.5f, -0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.2f, 0.2f, -0.5f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.2f, 0.8f,
+        -0.5f, 0.3f, -0.3f, -1.0f, 0.0f, 0.0f, 0.2f, 0.8f, -0.5f, 0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.8f, -0.5f, -0.3f, -0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.2f,
+        -0.5f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.8f, 0.2f, -0.5f, -0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.2f, -0.5f, 0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.8f,
+        -0.5f, 0.3f, 0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.8f, -0.5f, 0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.8f, 0.8f, -0.5f, -0.3f, 0.3f, -1.0f, 0.0f, 0.0f, 0.8f, 0.2f,
+
+        // RIGHT FACE (X = 0.5)
+        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.5f, -0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.2f, 0.5f, -0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.2f,
+        0.5f, -0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.2f, 0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.8f, 0.5f, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f, 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.5f, 0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f, 0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.8f,
+        0.5f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.2f, 0.2f, 0.5f, -0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.2f, 0.5f, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f,
+        0.5f, 0.3f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.8f, 0.5f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.2f, 0.8f, 0.5f, -0.3f, 0.3f, 1.0f, 0.0f, 0.0f, 0.2f, 0.2f,
+        0.5f, -0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.2f, 0.5f, -0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.8f, 0.2f, 0.5f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.8f, 0.8f,
+        0.5f, 0.3f, -0.3f, 1.0f, 0.0f, 0.0f, 0.8f, 0.8f, 0.5f, 0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.8f, 0.5f, -0.3f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.2f,
+
+        // BOTTOM FACE (Y = -0.5)
+        -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f, -0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f,
+
+        // TOP FACE (Y = 0.5)
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
     float vertices[] = {
         // Back face (z = -0.5f)
         -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
@@ -412,6 +459,7 @@ int main()
     genVertexAttribs(&planeThreeVAO, planeThreeVerticies, &VBO[3], sizeof(planeThreeVerticies));
     genVertexAttribs(&planeFourVAO, planeFourVerticies, &VBO[4], sizeof(planeFourVerticies));
     genVertexAttribs(&spaceFabricPlaneVAO, spaceFabricVertices, &VBO[5], sizeof(spaceFabricVertices));
+    genVertexAttribs(&WallscutoutWallVAO, cutoutWallVertices, &VBO[6], sizeof(cutoutWallVertices));
 
 // --- The Main Loop Swap ---
 #ifdef __EMSCRIPTEN__
